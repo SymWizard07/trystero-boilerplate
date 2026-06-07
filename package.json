@@ -1,0 +1,20 @@
+{
+  "name": "trystero-boilerplate",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:host": "vite --host 0.0.0.0",
+    "dev:https": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@trystero-p2p/mqtt": "latest",
+    "@vitejs/plugin-basic-ssl": "latest",
+    "trystero": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {}
+}

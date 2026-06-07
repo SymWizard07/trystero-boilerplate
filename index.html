@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trystero Peer Connection Demo</title>
+  </head>
+  <body>
+    <main id="app">
+      <section class="hero">
+        <p class="eyebrow">Trystero boilerplate</p>
+        <h1>Two-peer connection test</h1>
+        <p>
+          Open this page in two browser windows or on two devices, use the same room name,
+          and watch Trystero connect the peers.
+        </p>
+      </section>
+
+      <section class="card controls" aria-labelledby="room-heading">
+        <div>
+          <h2 id="room-heading">Room</h2>
+          <p>Share this page URL after joining to let another peer use the same room.</p>
+        </div>
+
+        <form id="room-form">
+          <label for="room-name">Room name</label>
+          <div class="room-row">
+            <input id="room-name" name="roomName" autocomplete="off" spellcheck="false" />
+            <button type="submit">Join room</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Connection</h2>
+          <dl class="stats">
+            <div>
+              <dt>Status</dt>
+              <dd id="status">Not connected</dd>
+            </div>
+            <div>
+              <dt>Your peer ID</dt>
+              <dd id="self-id">Waiting to join</dd>
+            </div>
+            <div>
+              <dt>Connected peers</dt>
+              <dd id="peer-count">0</dd>
+            </div>
+            <div>
+              <dt>Relay sockets</dt>
+              <dd id="relay-status">Not connected</dd>
+            </div>
+            <div>
+              <dt>Last message</dt>
+              <dd id="last-message">None yet</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h2>Peers</h2>
+          <ul id="peer-list" class="peer-list">
+            <li>No peers connected yet.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Messaging test</h2>
+        <p>
+          Once a peer appears, send a ping. If the other browser receives it, peer-to-peer
+          data is working.
+        </p>
+        <button id="ping-button" type="button" disabled>Send ping to peers</button>
+      </section>
+
+      <section class="card">
+        <h2>Event log</h2>
+        <ol id="log" class="log"></ol>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
