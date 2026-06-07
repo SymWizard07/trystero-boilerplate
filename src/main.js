@@ -12,9 +12,16 @@ const elements = {
   selfId: document.querySelector('#self-id'),
   peerCount: document.querySelector('#peer-count'),
   relayStatus: document.querySelector('#relay-status'),
+  elapsedTime: document.querySelector('#elapsed-time'),
   peerList: document.querySelector('#peer-list'),
   lastMessage: document.querySelector('#last-message'),
   pingButton: document.querySelector('#ping-button'),
+  appId: document.querySelector('#app-id'),
+  activeRoom: document.querySelector('#active-room'),
+  pageUrl: document.querySelector('#page-url'),
+  secureContext: document.querySelector('#secure-context'),
+  peerMap: document.querySelector('#peer-map'),
+  relayDetails: document.querySelector('#relay-details'),
   log: document.querySelector('#log'),
 }
 
@@ -22,8 +29,14 @@ let room
 let sendPing
 let connectedPeers = new Set()
 let activeRoomName = ''
+let joinStartedAt = 0
 const hasRequiredCrypto = Boolean(window.crypto?.subtle)
 const socketStateLabels = ['Connecting', 'Open', 'Closing', 'Closed']
+const socketListeners = new WeakSet()
+
+elements.appId.textContent = appId
+elements.pageUrl.textContent = window.location.href
+elements.secureContext.textContent = window.isSecureContext ? 'Yes' : 'No'
 
 elements.roomInput.value = initialRoom
 elements.form.addEventListener('submit', (event) => {
@@ -41,11 +54,15 @@ elements.pingButton.addEventListener('click', () => {
   }
 
   sendPing(message)
-  noteMessage(`Ping sent from ${shortId(selfId)}`)
+    .then(() => noteMessage(`Ping sent from ${shortId(selfId)}`))
+    .catch((error) => {
+      addLog(`Ping failed: ${formatError(error)}`)
+      console.error('[trystero-demo] ping failed', error)
+    })
 })
 
 joinNamedRoom(initialRoom)
-setInterval(updateRelayStatus, 1000)
+setInterval(updateDiagnostics, 1000)
 
 function joinNamedRoom(roomName) {
   const normalizedRoomName = roomName.trim()
@@ -61,7 +78,10 @@ function joinNamedRoom(roomName) {
 
   activeRoomName = normalizedRoomName
   connectedPeers = new Set()
+  joinStartedAt = Date.now()
   updateRoomUrl(normalizedRoomName)
+  elements.activeRoom.textContent = activeRoomName
+  elements.pageUrl.textContent = window.location.href
 
   if (!hasRequiredCrypto) {
     updateConnectionUi('Needs HTTPS or localhost')
@@ -71,22 +91,35 @@ function joinNamedRoom(roomName) {
 
   updateConnectionUi('Joining room...')
   addLog(`Joining room "${normalizedRoomName}" as ${shortId(selfId)}.`)
+  console.info('[trystero-demo] joining room', {
+    appId,
+    roomName: normalizedRoomName,
+    selfId,
+    url: window.location.href,
+  })
 
-  room = joinRoom({ appId }, normalizedRoomName)
-  updateRelayStatus()
+  room = joinRoom({ appId }, normalizedRoomName, {
+    onJoinError: ({ peerId, error }) => {
+      addLog(`Join error for ${shortId(peerId)}: ${formatError(error)}`)
+      console.error('[trystero-demo] join error', { peerId, error })
+    },
+  })
+  updateDiagnostics()
   const pingAction = room.makeAction('ping')
   sendPing = pingAction.send
 
   room.onPeerJoin = (peerId) => {
     connectedPeers.add(peerId)
     updateConnectionUi('Connected')
-    addLog(`Peer joined: ${shortId(peerId)}.`)
+    addLog(`Peer joined: ${shortId(peerId)} after ${elapsedJoinSeconds()}s.`)
+    console.info('[trystero-demo] peer joined', { peerId, peers: Object.keys(room.getPeers()) })
   }
 
   room.onPeerLeave = (peerId) => {
     connectedPeers.delete(peerId)
     updateConnectionUi(connectedPeers.size ? 'Connected' : 'Waiting for another peer')
     addLog(`Peer left: ${shortId(peerId)}.`)
+    console.info('[trystero-demo] peer left', { peerId, peers: Object.keys(room.getPeers()) })
   }
 
   pingAction.onMessage = (message, { peerId }) => {
@@ -97,14 +130,23 @@ function joinNamedRoom(roomName) {
   updateConnectionUi('Waiting for another peer')
 }
 
+function updateDiagnostics() {
+  updateRelayStatus()
+  updatePeerMap()
+  updateElapsedTime()
+}
+
 function updateRelayStatus() {
   const relaySockets = getRelaySockets()
   const relayEntries = Object.entries(relaySockets)
 
   if (relayEntries.length === 0) {
     elements.relayStatus.textContent = 'No relay sockets yet'
+    elements.relayDetails.textContent = 'No relay sockets yet'
     return
   }
+
+  relayEntries.forEach(([relayUrl, socket]) => attachSocketDiagnostics(relayUrl, socket))
 
   elements.relayStatus.textContent = relayEntries
     .map(([url, socket]) => {
@@ -112,6 +154,49 @@ function updateRelayStatus() {
       return `${new URL(url).host}: ${state}`
     })
     .join(', ')
+
+  elements.relayDetails.textContent = relayEntries
+    .map(([url, socket]) => {
+      const state = socketStateLabels[socket.readyState] || `State ${socket.readyState}`
+      return `${url} (${state})`
+    })
+    .join('\n')
+}
+
+function attachSocketDiagnostics(relayUrl, socket) {
+  if (socketListeners.has(socket)) {
+    return
+  }
+
+  socketListeners.add(socket)
+  addLog(`Relay socket found: ${new URL(relayUrl).host} is ${socketState(socket)}.`)
+
+  socket.addEventListener('open', () => {
+    addLog(`Relay opened: ${new URL(relayUrl).host}.`)
+    console.info('[trystero-demo] relay opened', { relayUrl })
+  })
+  socket.addEventListener('close', (event) => {
+    addLog(`Relay closed: ${new URL(relayUrl).host} code ${event.code}.`)
+    console.warn('[trystero-demo] relay closed', { relayUrl, code: event.code, reason: event.reason })
+  })
+  socket.addEventListener('error', (event) => {
+    addLog(`Relay error: ${new URL(relayUrl).host}.`)
+    console.error('[trystero-demo] relay error', { relayUrl, event })
+  })
+}
+
+function updatePeerMap() {
+  if (!room) {
+    elements.peerMap.textContent = 'No room yet'
+    return
+  }
+
+  const peerIds = Object.keys(room.getPeers())
+  elements.peerMap.textContent = peerIds.length ? peerIds.join('\n') : 'No active WebRTC peers'
+}
+
+function updateElapsedTime() {
+  elements.elapsedTime.textContent = joinStartedAt ? `${elapsedJoinSeconds()}s` : '0s'
 }
 
 function updateConnectionUi(status) {
@@ -141,7 +226,7 @@ function noteMessage(message) {
 
 function addLog(message) {
   const item = document.createElement('li')
-  item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`
+  item.textContent = `[${new Date().toLocaleTimeString()} +${elapsedJoinSeconds()}s] ${message}`
   elements.log.prepend(item)
 }
 
@@ -157,4 +242,20 @@ function randomRoomName() {
 
 function shortId(peerId) {
   return peerId ? `${peerId.slice(0, 8)}...` : 'unknown peer'
+}
+
+function elapsedJoinSeconds() {
+  return joinStartedAt ? Math.round((Date.now() - joinStartedAt) / 1000) : 0
+}
+
+function socketState(socket) {
+  return socketStateLabels[socket.readyState] || `State ${socket.readyState}`
+}
+
+function formatError(error) {
+  if (!error) {
+    return 'Unknown error'
+  }
+
+  return error.message || String(error)
 }

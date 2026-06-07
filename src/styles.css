@@ -145,6 +145,10 @@ dd {
   overflow-wrap: anywhere;
 }
 
+.diagnostics dd {
+  white-space: pre-wrap;
+}
+
 .peer-list,
 .log {
   margin: 0;

@@ -52,6 +52,10 @@
               <dd id="relay-status">Not connected</dd>
             </div>
             <div>
+              <dt>Elapsed waiting</dt>
+              <dd id="elapsed-time">0s</dd>
+            </div>
+            <div>
               <dt>Last message</dt>
               <dd id="last-message">None yet</dd>
             </div>
@@ -73,6 +77,36 @@
           data is working.
         </p>
         <button id="ping-button" type="button" disabled>Send ping to peers</button>
+      </section>
+
+      <section class="card">
+        <h2>Diagnostics</h2>
+        <dl class="stats diagnostics">
+          <div>
+            <dt>App ID</dt>
+            <dd id="app-id"></dd>
+          </div>
+          <div>
+            <dt>Active room</dt>
+            <dd id="active-room">Not joined</dd>
+          </div>
+          <div>
+            <dt>Page URL</dt>
+            <dd id="page-url"></dd>
+          </div>
+          <div>
+            <dt>Secure context</dt>
+            <dd id="secure-context"></dd>
+          </div>
+          <div>
+            <dt>Peer map</dt>
+            <dd id="peer-map">No room yet</dd>
+          </div>
+          <div>
+            <dt>Relay details</dt>
+            <dd id="relay-details">No relay sockets yet</dd>
+          </div>
+        </dl>
       </section>
 
       <section class="card">
