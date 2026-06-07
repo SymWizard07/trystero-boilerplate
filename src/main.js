@@ -1,4 +1,5 @@
-import { getRelaySockets, joinRoom, selfId } from '@trystero-p2p/mqtt'
+import mqtt from 'mqtt'
+import { defaultRelayUrls, getRelaySockets, joinRoom, selfId } from '@trystero-p2p/mqtt'
 import './styles.css'
 
 const appId = 'github-pages-trystero-boilerplate'
@@ -16,6 +17,7 @@ const elements = {
   peerList: document.querySelector('#peer-list'),
   lastMessage: document.querySelector('#last-message'),
   pingButton: document.querySelector('#ping-button'),
+  smokeButton: document.querySelector('#smoke-button'),
   appId: document.querySelector('#app-id'),
   activeRoom: document.querySelector('#active-room'),
   pageUrl: document.querySelector('#page-url'),
@@ -30,6 +32,7 @@ let sendPing
 let connectedPeers = new Set()
 let activeRoomName = ''
 let joinStartedAt = 0
+let smokeTest
 const hasRequiredCrypto = Boolean(window.crypto?.subtle)
 const socketStateLabels = ['Connecting', 'Open', 'Closing', 'Closed']
 const socketListeners = new WeakSet()
@@ -60,6 +63,9 @@ elements.pingButton.addEventListener('click', () => {
       console.error('[trystero-demo] ping failed', error)
     })
 })
+elements.smokeButton.addEventListener('click', () => {
+  sendSmokeTest()
+})
 
 joinNamedRoom(initialRoom)
 setInterval(updateDiagnostics, 1000)
@@ -79,6 +85,7 @@ function joinNamedRoom(roomName) {
   activeRoomName = normalizedRoomName
   connectedPeers = new Set()
   joinStartedAt = Date.now()
+  resetSmokeTest()
   updateRoomUrl(normalizedRoomName)
   elements.activeRoom.textContent = activeRoomName
   elements.pageUrl.textContent = window.location.href
@@ -104,6 +111,8 @@ function joinNamedRoom(roomName) {
       console.error('[trystero-demo] join error', { peerId, error })
     },
   })
+
+  setupSmokeTest(normalizedRoomName)
   updateDiagnostics()
   const pingAction = room.makeAction('ping')
   sendPing = pingAction.send
@@ -161,6 +170,88 @@ function updateRelayStatus() {
       return `${url} (${state})`
     })
     .join('\n')
+}
+
+function setupSmokeTest(roomName) {
+  const topic = smokeTopic(roomName)
+  const clients = defaultRelayUrls.map((relayUrl) => {
+    const client = mqtt.connect(relayUrl, {
+      clientId: `trystero_boilerplate_smoke_${selfId}_${Math.random().toString(36).slice(2)}`,
+      reconnectPeriod: 5000,
+    })
+
+    client.on('connect', () => {
+      addLog(`Smoke test connected: ${new URL(relayUrl).host}.`)
+      client.subscribe(topic, (error) => {
+        if (error) {
+          addLog(`Smoke subscribe failed on ${new URL(relayUrl).host}: ${formatError(error)}.`)
+          return
+        }
+
+        addLog(`Smoke subscribed on ${new URL(relayUrl).host}.`)
+      })
+    })
+
+    client.on('message', (messageTopic, buffer) => {
+      if (messageTopic !== topic) {
+        return
+      }
+
+      const payload = safeJsonParse(buffer.toString())
+      if (payload?.from === selfId) {
+        addLog(`Smoke loopback on ${new URL(relayUrl).host}.`)
+        return
+      }
+
+      addLog(`Smoke received from ${shortId(payload?.from)} via ${new URL(relayUrl).host}.`)
+      console.info('[trystero-demo] smoke received', { relayUrl, payload })
+    })
+
+    client.on('error', (error) => {
+      addLog(`Smoke relay error on ${new URL(relayUrl).host}: ${formatError(error)}.`)
+    })
+
+    return { relayUrl, client }
+  })
+
+  smokeTest = { topic, clients }
+}
+
+function resetSmokeTest() {
+  smokeTest?.clients.forEach(({ client }) => {
+    client.end(true)
+  })
+  smokeTest = null
+}
+
+function sendSmokeTest() {
+  if (!smokeTest) {
+    addLog('Smoke test is not ready yet.')
+    return
+  }
+
+  const payload = {
+    appId,
+    roomName: activeRoomName,
+    from: selfId,
+    sentAt: new Date().toISOString(),
+  }
+
+  smokeTest.clients.forEach(({ relayUrl, client }) => {
+    if (!client.connected) {
+      addLog(`Smoke publish skipped on ${new URL(relayUrl).host}: not connected.`)
+      return
+    }
+
+    client.publish(smokeTest.topic, JSON.stringify(payload), (error) => {
+      if (error) {
+        addLog(`Smoke publish failed on ${new URL(relayUrl).host}: ${formatError(error)}.`)
+        return
+      }
+
+      addLog(`Smoke published on ${new URL(relayUrl).host}.`)
+    })
+  })
 }
 
 function attachSocketDiagnostics(relayUrl, socket) {
@@ -258,4 +349,16 @@ function formatError(error) {
   }
 
   return error.message || String(error)
+}
+
+function smokeTopic(roomName) {
+  return `trystero-boilerplate-smoke/${appId}/${roomName}`
+}
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }

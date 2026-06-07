@@ -13,8 +13,8 @@
   "dependencies": {
     "@trystero-p2p/mqtt": "latest",
     "@vitejs/plugin-basic-ssl": "latest",
+    "mqtt": "^5.15.1",
     "trystero": "latest",
     "vite": "latest"
-  },
-  "devDependencies": {}
+  }
 }
